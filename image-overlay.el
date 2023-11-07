@@ -38,7 +38,7 @@
 
 (require 'org-element)
 
-(defvar image-overlay-line-height-offset 3)
+(defvar image-overlay-line-height-offset 10)
 
 (defvar image-overlay-show-width 700)
 
@@ -50,7 +50,7 @@
 
 (defvar image-overlay-list nil)
 
-(defvar image-overlay-url-match-regexp ".*\\.\\(png\\|jpg\\|jpeg\\)")
+(defvar image-overlay-url-match-regexp ".*\\.\\(png\\|jpg\\|jpeg\\|drawio\\|svg\\)")
 
 (require 'image-mode)
 
@@ -77,6 +77,18 @@ with a WIDTH (or image width if nil)."
   (image-overlay-clear-placeholder)
   (setq image-overlay-list nil))
 
+(defun drawio2image (path)
+  "Convert drawio PATH to image."
+  (let* ((drawio-exe "/Applications/draw.io.app/Contents/MacOS/draw.io")
+         (file-name (expand-file-name path))
+         (target-image (make-temp-file "drawio-" nil ".png"))
+         (cmd
+          (format "%s %s -x -f png -o %s" drawio-exe file-name target-image)))
+    ;; (print cmd)
+    (shell-command cmd nil nil)
+    target-image)
+  )
+
 (defun org-at-image-url-p ()
   "Return non-nil if the current position is at an image URL."
   (let* ((link (org-element-lineage (org-element-context) '(link) t))
@@ -85,7 +97,10 @@ with a WIDTH (or image width if nil)."
          (type (org-element-property :type link)))
     (when (and link
                (string-match-p image-overlay-url-match-regexp raw-link))
-      (if (string= type "file") (file-truename path) raw-link))))
+      (pcase type
+        ("file" (file-truename path))
+        ("drawio" (drawio2image path))
+        (_ raw-link)))))
 
 (defun image-overlay-display-file (file)
   "Display FILE."
