@@ -37,45 +37,19 @@
 ;;; Code:
 
 (require 'org-element)
-
-(defvar image-overlay-line-height-offset 10)
-
-(defvar image-overlay-show-width 700)
+(require 'image-mode)
 
 (defvar image-overlay-format "/image_overlay_%04d.png")
 
-(defvar image-overlay-temporary-directory-prefix)
-
-(defvar image-overlay-placeholder "__#_#_@@_#_#__")
+(defvar image-overlay-line-height-offset 10)
 
 (defvar image-overlay-list nil)
 
+(defvar image-overlay-show-width 700)
+
+(defvar image-overlay-temporary-directory "image-overlay-split-images-")
+
 (defvar image-overlay-url-match-regexp ".*\\.\\(png\\|jpg\\|jpeg\\|drawio\\|svg\\)")
-
-(require 'image-mode)
-
-(defun image-overlay-display (image)
-  "Display an IMAGE as an overlay at POINT (or current point if nil)
-with a WIDTH (or image width if nil)."
-  (let ((overlay
-         (make-overlay (line-beginning-position) (line-end-position))))
-    (add-to-list 'image-overlay-list overlay)
-    (overlay-put overlay 'display image)
-    overlay))
-
-(defun image-overlay-clear-placeholder ()
-  "Clear placeholder."
-  (save-excursion
-    (goto-char (point-min))
-    (while (search-forward image-overlay-placeholder nil t)
-      (delete-line))))
-
-(defun image-overlay-clear ()
-  "Clear overlays and placeholder."
-  (interactive)
-  (mapc #'delete-overlay image-overlay-list)
-  (image-overlay-clear-placeholder)
-  (setq image-overlay-list nil))
 
 (defun drawio2image (path)
   "Convert drawio PATH to image."
@@ -86,68 +60,41 @@ with a WIDTH (or image width if nil)."
           (format "%s %s -x -f png -o %s" drawio-exe file-name target-image)))
     ;; (print cmd)
     (shell-command cmd nil nil)
-    target-image)
-  )
+    target-image))
 
-(defun org-at-image-url-p ()
-  "Return non-nil if the current position is at an image URL."
-  (let* ((link (org-element-lineage (org-element-context) '(link) t))
-         (raw-link (org-element-property :raw-link link))
-         (path (org-element-property :path link))
-         (type (org-element-property :type link)))
-    (when (and link
-               (string-match-p image-overlay-url-match-regexp raw-link))
-      (pcase type
-        ("file" (file-truename path))
-        ("drawio" (drawio2image path))
-        (_ raw-link)))))
+(defun image-overlay--async-start-process (name program finish-func &rest program-args)
+  "Start the executable PROGRAM asynchronously named NAME.  See `async-start'.
+PROGRAM is passed PROGRAM-ARGS, calling FINISH-FUNC with the
+process object when done.  If FINISH-FUNC is nil, the future
+object will return the process object when the program is
+finished.  Set DEFAULT-DIRECTORY to change PROGRAM's current
+working directory."
+  (let* ((buf (generate-new-buffer (concat "*" name "*")))
+         (buf-err (generate-new-buffer (concat "*" name ":err*")))
+         (proc (let ((process-connection-type nil))
+                 (make-process
+                  :name name
+                  :buffer buf
+                  :stderr buf-err
+                  :command (cons program program-args)
+                  :noquery async-process-noquery-on-exit))))
+    (set-process-sentinel
+     (get-buffer-process buf-err)
+     (lambda (proc _change)
+       (unless (process-live-p proc)
+         (kill-buffer (process-buffer proc)))))
 
-(defun image-overlay-display-file (file)
-  "Display FILE."
-  (save-excursion
-    (let ((images (image-overlay--split-image-horizontally file)))
-
-      (dotimes (i (length images))
-        (end-of-line)
-        (when (equal i 0) (insert "\n"))
-        (insert image-overlay-placeholder)
-        (image-overlay-display (nth i images))
-        (when (not (equal i (- (length images) 1)))
-          (insert "\n"))))))
-
-(defun image-overlay-display-current ()
-  "Display current image."
-  (interactive)
-  (when-let ((image-file (org-at-image-url-p)))
-    (image-overlay-display-file image-file)))
-
-(defun open-new-empty-line-below ()
-  "Open new empty-line."
-  (end-of-line)
-  (insert "\n "))
-
-(defun image-overlay--split-image-with-imagemagick (image-file proportion output-directory)
-  "Split the given IMAGE-FILE with PROPORTION.
-to OUTPUT-DIRECTORY using imagemagick."
-  (let* ((command-format "convert %s -crop %s +repage +adjoin %s")
-         (cmd
-          (format command-format
-                  image-file
-                  (concat "100%x" (number-to-string proportion) "%")
-                  (concat output-directory image-overlay-format))))
-    (shell-command-to-string cmd)
-    ;; list output files: filter out the files that begin with a dot.
-    (directory-files output-directory t "^[^.].*" )))
-
-(defun image-overlay--create-image (file width height)
-  "Create an image with specified FILE , WIDTH and HEIGHT."
-  (create-image file 'imagemagick nil :width width :height height))
-
-(defvar image-overlay-temporary-directory "image-overlay-split-images-")
+    (set-process-sentinel
+     proc
+     (lambda (proc status)
+       (when (string= status "finished\n")
+         (with-current-buffer (process-buffer proc)
+           (funcall finish-func (string-trim (buffer-string)))
+           (kill-buffer)))))))
 
 (defun image-overlay--compute--image-split-info (image-file)
   "Compute image split info for IMAGE-FILE."
-  (let* ((image (create-image image-file 'imagemagick))
+  (let* ((image (create-image image-file 'png))
          (line-height
           (+ (line-pixel-height) image-overlay-line-height-offset))
          (image-width (car (image-size image)))
@@ -160,56 +107,127 @@ to OUTPUT-DIRECTORY using imagemagick."
           :proportion proportion
           :show-width image-overlay-show-width)))
 
-(defun image-overlay--split-image-horizontally (image-file)
-  "Split the given IMAGE-FILE horizontally."
+(defun image-overlay--create-image (file width height)
+  "Create an image with specified FILE , WIDTH and HEIGHT."
+  (create-image file 'png nil :width width :height height))
+
+(defun image-overlay--split-image-with-imagemagick (image-file proportion output-directory callback)
+  "Split the given IMAGE-FILE with PROPORTION.
+to OUTPUT-DIRECTORY using imagemagick.
+when process finish call CALLBACK function."
+  (image-overlay--async-start-process
+   "magick"
+   "magick"
+   (lambda (data)
+     ;; list output files: filter out the files that begin with a dot.
+     (funcall callback
+              (directory-files output-directory t "^[^.].*")))
+   image-file
+   "-crop"
+   (concat "100%x" (number-to-string proportion) "%")
+   "+repage"
+   "+adjoin"
+   (concat output-directory image-overlay-format)))
+
+(defun image-overlay--split-image-horizontally (image-file callback)
+  "Split the given IMAGE-FILE horizontally.
+When process is finished, call CALLBACK function."
   (let* ((image-split-info
           (image-overlay--compute--image-split-info image-file))
-         (proportion (plist-get image-split-info :proportion ))
-         (show-width (plist-get image-split-info :show-width ))
-         (show-height (plist-get image-split-info :show-height ))
+         (proportion (plist-get image-split-info :proportion))
+         (show-width (plist-get image-split-info :show-width))
+         (show-height (plist-get image-split-info :show-height))
          (temporary-file-directory
-          (make-temp-file image-overlay-temporary-directory  t))
-         (splited-image-files
-          (image-overlay--split-image-with-imagemagick image-file proportion temporary-file-directory)))
-    (mapcar
-     (lambda (file)
-       (image-overlay--create-image file show-width show-height))
-     splited-image-files)))
+          (make-temp-file image-overlay-temporary-directory t)))
+    (image-overlay--split-image-with-imagemagick
+     image-file
+     proportion
+     temporary-file-directory
+     (lambda (files)
+       (funcall callback
+        (mapcar
+         (lambda (file)
+           (image-overlay--create-image file show-width show-height))
+         files))))))
 
-(defun image-overlay--could-render-p ()
-  "Could render image in current?"
-  (and
-   (org-at-image-url-p)
-   (not
-    (save-excursion (forward-line) (image-overlay--placeholder-p)))))
+(defun image-overlay-clear ()
+  "Clear overlays and placeholder."
+  (interactive)
+  (mapc #'delete-overlay image-overlay-list)
+  (setq image-overlay-list nil))
 
-(defun image-overlay--could-clear-p ()
-  "Could clear image in current?"
-  (not (or (org-at-image-url-p) (image-overlay--placeholder-p))))
+(defun image-overlay--remove-other-overlay (pos)
+  (dolist (ov (overlays-at pos))
+    (delete-overlay ov)))
 
+(defun image-overlay-display (start end display &optional buffer)
+  "Make an overlay from START to END in the BUFFER to show DISPLAY."
+  (image-overlay--remove-other-overlay start)
+  (let ((overlay
+         (make-overlay start end buffer)))
+    (add-to-list 'image-overlay-list overlay)
+    (overlay-put overlay 'display display)
+    (overlay-put overlay 'face 'default)
+    overlay))
 
-(defun image-overlay--placeholder-p ()
-  "Is there a placeholder?"
-  (string=
-   image-overlay-placeholder
-   (buffer-substring-no-properties
-    (line-beginning-position)
-    (line-end-position))))
+(defun image-overlay-display-file (image-file-info)
+  "Display image by IMAGE-FILE-INFO."
+  (save-excursion
+    (let ((begin (plist-get image-file-info :begin))
+          (end (plist-get image-file-info :end))
+          (buffer (current-buffer))
+          (file (plist-get image-file-info :src)))
+      (image-overlay-display begin end "" buffer)
+      (image-overlay--split-image-horizontally file
+       (lambda (images)
+         (cl-loop for image in images
+                  for index from 0
+                  do
+                  (when (< begin end)
+                   (image-overlay-display begin (1+ begin) (nth index images) buffer)
+                   (setq begin (1+ begin))
+                   (image-overlay-display begin (1+ begin) "\n" buffer)
+                   (setq begin (1+ begin))))))
+      (image-overlay-display begin end "" buffer))))
 
-(defun auto-image-overlay ()
+(defun image-overlay-list-links ()
+  "List all links in the current buffer."
+  (let ((links '())
+        (content (buffer-string)))
+    (with-temp-buffer
+      (insert content)
+      (org-element-map (org-element-parse-buffer) 'link
+        (lambda (link)
+          (let ((type (org-element-property :type link))
+                (path (org-element-property :path link))
+                (begin (org-element-property :begin link))
+                (end (org-element-property :end link))
+                (raw-link (org-element-property :raw-link link)))
+            (when (and link (string-match-p image-overlay-url-match-regexp raw-link))
+              (push
+               (list
+                :begin begin
+                :end end
+                :type type
+                :src
+                (pcase type
+                  ("file" (file-truename path))
+                  (_ raw-link)))
+               links))))))
+    links))
+
+(defun image-overlay-render-buffer ()
   "Auto image overlay."
-  (when (image-overlay--could-render-p)
-    (image-overlay-display-current))
-  (when (image-overlay--could-clear-p) (image-overlay-clear)))
+  (dolist (file-info (image-overlay-list-links))
+    (image-overlay-display-file file-info)))
 
-;;;###autoload
 (define-minor-mode image-overlay-mode
   "A minor mode that show image overlay."
   :init-value nil
   :global nil
   (if (not image-overlay-mode)
-      (progn (remove-hook 'post-command-hook 'auto-image-overlay t))
-    (progn (add-hook 'post-command-hook 'auto-image-overlay nil t))))
+      (image-overlay-clear)
+    (image-overlay-render-buffer)))
 
 (provide 'image-overlay)
 ;;; image-overlay.el ends here
