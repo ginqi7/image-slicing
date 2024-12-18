@@ -1,4 +1,4 @@
-#+title: Image Overlay
+#+title: Slicing Image
 #+author: Qiqi Jin
 #+language: en
 
@@ -11,34 +11,55 @@ I hope to move images in the same way as moving text, line by line.
 
 So I created this package to horizontally slice the images referenced in the buffer into multiple images. In Emacs, only a portion of the original image is displayed on each line. Finally, the image can be moved line by line.
 
+During the development process, I found [[https://github.com/jcfk/org-sliced-images][org-sliced-images]] which was almost the same as my idea. And thanks to him for letting me know about =insert-sliced-image= in Emacs.
+
+You can find some development history [[file:development-history.org][here]].
+
+
 * Prerequisites
 
-*[[https://imagemagick.org/][ImageMagick]]*
+*curl*: Used to download remote images.
 
-This cli tool can slice an image into multiple part.
+** Require Packages
++ *org-element*: Used to parse the buffer to retrieve all links.
++ *image*: Used to create an image object.
++ *url-util* : A utility for handling URL formats.
 
 ** Install
 + clone the project in your own emacs configuration files directory, like:
 #+BEGIN_SRC sh
-  git clone git@github.com:ginqi7/image-overlay.git ~/.emacs.d/lisp/image-overlay
+  git clone git@github.com:ginqi7/image-slicing.git ~/.emacs.d/lisp/image-slicing
 #+END_SRC
 
 + add the path to 'load-path'
 #+BEGIN_SRC emacs-lisp
-  (add-to-list 'load-path (expand-file-name "~/.emacs.d/lisp/d/lisp/image-overlay"))
+  (add-to-list 'load-path (expand-file-name "~/.emacs.d/lisp/d/lisp/image-slicing"))
 #+END_SRC
 
 * Configuration
 Here are a few variables that can be used for configuration:
 #+BEGIN_SRC emacs-lisp
-(require 'image-overlay)
+(require 'image-slicing)
+#+end_src
+
+
+** EWW Config
+1. cancel the eww defualt image render.
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'shr-external-rendering-functions
+             '(img . image-slicing-tag-img))
+#+end_src
+2. Add ~image-slicing~ to ~eww-after-render-hook~
+#+BEGIN_SRC emacs-lisp
+(push #'image-slicing-mode eww-after-render-hook)
 #+end_src
 
 
 * Features
 
-- `image-overlay-mode` : Automatically find the image links in the buffer and render them for multi-line display.
-- `Asynchronous` : Slicing image is Asynchronous.
+- =image-slicing-mode=: Automatically finds image links in the buffer and renders them as multiline display.
+- =Asynchronous=: Asynchronous download of remote images.
+- =EWW=: Support eww-mode
 
 
 ** Supported Link Format
@@ -54,6 +75,13 @@ Here are a few variables that can be used for configuration:
 [[file:screencast.gif]]
 
 * Disadvantages
-- It will generates many temporary image files in the temporary system directory.
-- When the URL link is too short, the image will be incomplete.
+
+- If there are many remote image links in the buffer, it will generate many temporary image files in the temporary system directory.
+- If the URL link is too short, the number of slices of the original image will be small, and the image line height will be large.
+- Only one buffer can be rendered at a time.
+
+
+* Todo List
+- Adapt nov
+
 
