@@ -40,6 +40,21 @@
 (require 'image)
 (require 'url-util)
 
+(defcustom image-slicing-download-concurrency 20
+  "Define the maximum concurrency of images download."
+  :group 'image-slicing
+  :type 'number)
+
+(defcustom image-slicing-line-height-scale 2
+  "Define how many line height an image slice occupies."
+  :group 'image-slicing
+  :type 'number)
+
+(defcustom image-slicing-max-width 700
+  "Define the maximum width of images display."
+  :group 'image-slicing
+  :type 'number)
+
 (defvar image-slicing--image-match-regexp ".*\\.\\(png\\|jpg\\|jpeg\\|drawio\\|svg\\|webp\\)")
 
 (defvar image-slicing--links nil)
@@ -51,10 +66,6 @@
 (defvar image-slicing--timer nil)
 
 (defvar image-slicing-debug-p nil)
-
-(defvar image-slicing-max-width 700)
-
-(defvar image-slicing-line-height-scale 2)
 
 (defun image-slicing--async-start-process (name program finish-func &rest program-args)
   "Start the executable PROGRAM asynchronously named NAME.
@@ -107,24 +118,70 @@ Otherwise, just run the CALLBACK function only."
          temp-image-file)
       (funcall callback image-src))))
 
-(defun image-slicing-create-image (image-src)
-  "Create an image object by IMAGE-SRC.
-If the image width is greater than `image-slicing-max-width`, scale it down."
-  (let* ((image (create-image image-src))
-         (image-pixel-cons (image-size image t))
-         (image-pixel-w (car image-pixel-cons)))
-    (when (> image-pixel-w image-slicing-max-width)
-      (setf (image-property image :width) image-slicing-max-width))
-    image))
-
-(defun image-slicing-display (start end display &optional buffer)
-  "Make an overlay from START to END in the BUFFER to show DISPLAY."
-  (let ((overlay
-         (make-overlay start end buffer)))
+(defun image-slicing-display (start end display buffer &optional before-string after-string)
+  "Make an overlay from START to END in the BUFFER to show DISPLAY.
+If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or after-string."
+  (let ((overlay (make-overlay start end buffer)))
     (add-to-list 'image-slicing--overlay-list overlay)
+    (when before-string
+      (overlay-put overlay 'before-string before-string))
+    (when after-string
+      (overlay-put overlay 'after-string after-string))
     (overlay-put overlay 'display display)
     (overlay-put overlay 'face 'default)
     overlay))
+
+(defun image-slicing-slice (image-src max-rows)
+  "Slice IMAGE-SRC into mutiple rows limited by MAX-ROWS."
+  (let* ((image (image-slicing-create-image image-src))
+         (image-pixel-cons (image-size image t))
+         (image-pixel-h (cdr image-pixel-cons))
+         (spliced-image-line-height (* image-slicing-line-height-scale (default-font-height)))
+         (rows (/ image-pixel-h spliced-image-line-height))
+         (rows (min max-rows rows))
+         (x 0.0)
+         (dx 1.0001)
+         (y 0.0)
+         (dy (/ 1.0001 rows))
+         (sliced-images))
+    (while (< y 1.0)
+      (push (list (list 'slice x y dx dy) image) sliced-images)
+      (setq y (+ y dy)))
+    (reverse sliced-images)))
+
+(defun image-slicing-display-file (image-file-info)
+  "Display image by IMAGE-FILE-INFO."
+  (save-excursion
+    (let* ((begin (plist-get image-file-info :begin))
+           (end (plist-get image-file-info :end))
+           (buffer (plist-get image-file-info :buffer))
+           (image-src (plist-get image-file-info :src))
+           (new-line-str (propertize "\n" 'face 'default))
+           (line-beginning-p (progn (goto-char begin) (equal begin (line-beginning-position)))))
+      (plist-put image-file-info :status "start")
+      (image-slicing--download-file-if-need
+       image-src
+       (lambda (image)
+         (unless line-beginning-p
+           (image-slicing-display begin (1+ begin) "" buffer new-line-str)
+           (setq begin (1+ begin)))
+         (dolist (image (image-slicing-slice image (- end begin 1)))
+           (image-slicing-display begin (1+ begin) image buffer nil new-line-str)
+           (setq begin (1+ begin)))
+         (image-slicing-display begin end "" buffer)
+         (plist-put image-file-info :status "finished"))))))
+
+(defun image-slicing-run-tasks ()
+  "Run Tasks unstarted."
+  (let ((count 0)
+        status)
+    (dolist (link image-slicing--links)
+      (setq status (plist-get link :status))
+      (when (string= status "start")
+        (setq count (1+ count)))
+      (when (and (< count image-slicing-download-concurrency) (string= status "init"))
+        (image-slicing-display-file link)
+        (setq count (1+ count))))))
 
 (defun image-slicing--create-render-timer ()
   "Create a timer to render images at regular intervals."
@@ -170,55 +227,15 @@ If the image width is greater than `image-slicing-max-width`, scale it down."
   (mapc #'delete-overlay image-slicing--overlay-list)
   (setq image-slicing--overlay-list nil))
 
-(defun image-slicing-slice (image-src max-rows)
-  "Slice IMAGE-SRC into mutiple rows limited by MAX-ROWS."
-  (let* ((image (image-slicing-create-image image-src))
+(defun image-slicing-create-image (image-src)
+  "Create an image object by IMAGE-SRC.
+If the image width is greater than `image-slicing-max-width`, scale it down."
+  (let* ((image (create-image image-src))
          (image-pixel-cons (image-size image t))
-         (image-pixel-h (cdr image-pixel-cons))
-         (spliced-image-line-height (* image-slicing-line-height-scale (default-font-height)))
-         (rows (/ image-pixel-h spliced-image-line-height))
-         (rows (min max-rows rows))
-         (x 0.0)
-         (dx 1.0001)
-         (y 0.0)
-         (dy (/ 1.0001 rows))
-         (sliced-images))
-    (while (< y 1.0)
-      (push (list (list 'slice x y dx dy) image) sliced-images)
-      (setq y (+ y dy)))
-    (reverse sliced-images)))
-
-(defun image-slicing-display-file (image-file-info)
-  "Display image by IMAGE-FILE-INFO."
-  (save-excursion
-    (let* ((begin (plist-get image-file-info :begin))
-           (end (plist-get image-file-info :end))
-           (buffer (plist-get image-file-info :buffer))
-           (image-src (plist-get image-file-info :src)))
-      (plist-put image-file-info :status "start")
-      (image-slicing--download-file-if-need
-       image-src
-       (lambda (image)
-         (image-slicing-display begin end "" buffer)
-         (dolist (image (image-slicing-slice image (/ (- end begin) 2)))
-           (image-slicing-display begin (1+ begin) image buffer)
-           (setq begin (1+ begin))
-           (image-slicing-display begin (1+ begin) "\n" buffer)
-           (setq begin (1+ begin)))
-         (plist-put image-file-info :status "finished")))
-      (image-slicing-display begin end "" buffer))))
-
-(defun image-slicing-run-tasks ()
-  "Run Tasks unstarted."
-  (let ((count 0)
-        status)
-    (dolist (link image-slicing--links)
-      (setq status (plist-get link :status))
-      (when (string= status "start")
-        (setq count (1+ count)))
-      (when (and (< count 20) (string= status "init"))
-        (image-slicing-display-file link)
-        (setq count (1+ count))))))
+         (image-pixel-w (car image-pixel-cons)))
+    (when (> image-pixel-w image-slicing-max-width)
+      (setf (image-property image :width) image-slicing-max-width))
+    image))
 
 (defun image-slicing-render-buffer ()
   "Auto image overlay."
