@@ -39,6 +39,13 @@
 (require 'org-element)
 (require 'image)
 (require 'url-util)
+(require 'cl-extra)
+
+(defcustom image-slicing-cursor-fringe-bitmaps
+  '(left-fringe right-arrow warning)
+  "Define the Fringe Bitmaps indicator for the cursor position."
+  :group 'image-slicing
+  :type 'list)
 
 (defcustom image-slicing-download-concurrency 20
   "Define the maximum concurrency of images download."
@@ -54,6 +61,8 @@
   "Define the maximum width of images display."
   :group 'image-slicing
   :type 'number)
+
+(defvar image-slicing--cursor-fringe-overlay nil)
 
 (defvar image-slicing--image-match-regexp ".*\\.\\(png\\|jpg\\|jpeg\\|drawio\\|svg\\|webp\\)")
 
@@ -218,6 +227,23 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or after-str
                links))))))
     (reverse links)))
 
+(defun image-slicing-unset-cursor-fringe ()
+  "Unset fringe indicator of last cursor."
+  (setq cursor-type t)
+  (when image-slicing--cursor-fringe-overlay
+    (delete-overlay image-slicing--cursor-fringe-overlay)
+    (setq image-slicing--cursor-fringe-overlay nil)))
+
+(defun image-slicing-set-cursor-fringe ()
+  "Set an fringe indicator for the cursor position."
+  (image-slicing-unset-cursor-fringe)
+  (setq cursor-type nil)
+  (when image-slicing-cursor-fringe-bitmaps
+    (let ((ov (make-overlay (point) (point))))
+      (overlay-put ov 'before-string
+                   (propertize "." 'display image-slicing-cursor-fringe-bitmaps))
+      (setq image-slicing--cursor-fringe-overlay ov))))
+
 (defun image-slicing-clear ()
   "Clear related overlays and some related variables."
   (interactive)
@@ -244,10 +270,11 @@ If the image width is greater than `image-slicing-max-width`, scale it down."
   "Handle cursor visibility in eww-mode when over image slicing overlays.
 This function is installed on `post-command-hook'."
   (when (derived-mode-p 'eww-mode)
-    (setq cursor-type (not (cl-some (lambda (overlay)
-                                      (string-equal (overlay-get overlay 'overlay-type)
-                                                    "image-slicing"))
-                                    (overlays-at (point)))))))
+    (if (cl-some (lambda (overlay)
+                   (string-equal (overlay-get overlay 'overlay-type) "image-slicing"))
+                 (overlays-at (point)))
+        (image-slicing-set-cursor-fringe)
+      (image-slicing-unset-cursor-fringe))))
 
 (defun image-slicing-render-buffer ()
   "Auto image overlay."

@@ -43,11 +43,13 @@ Here are a few variables that can be used for configuration:
 #+end_src
 
 ** Variables
-| variable                           | default value | explain                                      |
-|------------------------------------+---------------+----------------------------------------------|
-| image-slicing-download-concurrency |            20 | the maximum concurrency of images download   |
-| image-slicing-line-height-scale    |             2 | how many line height an image slice occupies |
-| image-slicing-max-width            |           700 | the maximum width of images display          |
+| variable                            |                      default value | explain                                               |
+|-------------------------------------+------------------------------------+-------------------------------------------------------|
+| image-slicing-download-concurrency  |                                 20 | the maximum concurrency of images download            |
+| image-slicing-line-height-scale     |                                  2 | how many line height an image slice occupies          |
+| image-slicing-max-width             |                                700 | the maximum width of images display                   |
+| image-slicing-cursor-fringe-bitmaps | '(left-fringe right-arrow warning) | the Fringe Bitmaps indicator for the cursor position.[fn:1] |
+
 
 
 ** EWW Config
@@ -91,4 +93,6 @@ Here are a few variables that can be used for configuration:
 * Todo List
 - Adapt nov
 
+* Footnotes
 
+[fn:1] [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Fringe-Bitmaps.html][Emacs Fringe Bitmaps]]
