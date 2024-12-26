@@ -285,7 +285,7 @@ This function is installed on `post-command-hook'."
 
 (defun image-slicing-tag-img (dom &optional url)
   "Parse img DOM."
-    (let ((url (shr-expand-url (or url (shr--preferred-image dom)))))
+    (let ((url (string-trim-right (shr-expand-url (or url (shr--preferred-image dom))) ",")))
       (when (not (string-prefix-p "http" url))
         (setq url (concat "https:" url)))
       (insert (format "[[%s]]" url))))
