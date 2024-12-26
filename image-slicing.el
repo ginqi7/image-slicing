@@ -283,12 +283,12 @@ This function is installed on `post-command-hook'."
 
   (add-hook 'post-command-hook #'image-slicing-post-command nil t))
 
-(defun image-slicing-tag-img (dom &optional _url)
+(defun image-slicing-tag-img (dom &optional url)
   "Parse img DOM."
-  (let ((url (dom-attr dom 'src)))
-    (when (not (string-prefix-p "http" url))
-      (setq url (concat "https:" url)))
-    (insert (format "[[%s]]" url))))
+    (let ((url (shr-expand-url (or url (shr--preferred-image dom)))))
+      (when (not (string-prefix-p "http" url))
+        (setq url (concat "https:" url)))
+      (insert (format "[[%s]]" url))))
 
 (define-minor-mode image-slicing-mode
   "A minor mode that show image overlay."
