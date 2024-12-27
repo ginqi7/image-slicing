@@ -88,7 +88,7 @@ working directory."
                   :name name
                   :buffer buf
                   :stderr buf-err
-                  :command (cons program program-args)))))
+                  :command (cons program (cl-delete nil program-args))))))
     (set-process-sentinel
      (get-buffer-process buf-err)
      (lambda (proc _change)
@@ -127,8 +127,7 @@ Otherwise, just run the CALLBACK function only."
          "-s"
          ;; request might be denied by some servers without referer section in http header.
          (if (equal major-mode 'eww-mode)
-             (concat "-e " (plist-get eww-data :url))
-           "")
+             (concat "-e " (plist-get eww-data :url)))
          "-o"
          temp-image-file)
       (funcall callback image-src))))
