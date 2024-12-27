@@ -123,6 +123,10 @@ Otherwise, just run the CALLBACK function only."
            (funcall callback temp-image-file))
          image-src
          "-s"
+         ;; request might be denied by some servers without referer section in http header.
+         (if (equal major-mode 'eww-mode)
+             (concat "-e " (plist-get eww-data :url))
+           "")
          "-o"
          temp-image-file)
       (funcall callback image-src))))
