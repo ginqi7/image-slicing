@@ -64,8 +64,6 @@
 
 (defvar image-slicing--cursor-fringe-overlay nil)
 
-(defvar image-slicing--image-match-regexp ".*\\.\\(png\\|jpg\\|jpeg\\|drawio\\|svg\\|webp\\)")
-
 (defvar image-slicing--links nil)
 
 (defvar image-slicing--overlay-list nil)
@@ -109,6 +107,10 @@ working directory."
 (defun image-slicing--remote-file-p (image-src)
   "Check if IMAGE-SRC is a remote file."
   (string-prefix-p "http" image-src))
+
+(defun image-slicing-supported-url-p (url)
+  "Check if URL is supported by Emacs image."
+  (image-supported-file-p (url-file-extension url)))
 
 (defun image-slicing--download-file-if-need (image-src callback)
   "If IMAGE-SRC is a remote file, download it and run the CALLBACK function.
@@ -216,7 +218,7 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or after-str
                 (begin (org-element-property :begin link))
                 (end (org-element-property :end link))
                 (raw-link (org-element-property :raw-link link)))
-            (when (and link (string-match-p image-slicing--image-match-regexp raw-link))
+            (when (and link (image-slicing-supported-url-p raw-link))
               (push
                (list
                 :status "init"
