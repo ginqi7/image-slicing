@@ -135,7 +135,8 @@ Otherwise, just run the CALLBACK function only."
 (defun image-slicing-display (start end display buffer &optional before-string after-string)
   "Make an overlay from START to END in the BUFFER to show DISPLAY.
 If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or after-string."
-  (let ((overlay (make-overlay start end buffer)))
+  (when-let* (((buffer-live-p buffer))
+              (overlay (make-overlay start end buffer)))
     (add-to-list 'image-slicing--overlay-list overlay)
     (when before-string
       (overlay-put overlay 'before-string before-string))
