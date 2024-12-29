@@ -1,5 +1,5 @@
 ;;; image-slicing.el --- Display an image as overlays.  -*- lexical-binding: t; -*-
-
+;; Package-Requires: ((emacs "28") (dash "2.18.0") (s "1.11.0") (f "0.20.0"))
 ;; Copyright (C) 2024  Qiqi Jin
 
 ;; Author: Qiqi Jin <ginqi7@gmail.com>
@@ -40,12 +40,15 @@
 (require 'image)
 (require 'url-util)
 (require 'cl-extra)
+(require 'eww)
+(require 'f)
+(require 'dash)
 
 (defcustom image-slicing-cursor-fringe-bitmaps
   '(left-fringe right-arrow warning)
   "Define the Fringe Bitmaps indicator for the cursor position."
   :group 'image-slicing
-  :type 'list)
+  :type '(repeat symbol))
 
 (defcustom image-slicing-download-concurrency 20
   "Define the maximum concurrency of images download."
@@ -62,17 +65,27 @@
   :group 'image-slicing
   :type 'number)
 
-(defvar image-slicing--cursor-fringe-overlay nil)
-
-(defvar image-slicing--links nil)
-
-(defvar image-slicing--overlay-list nil)
+(defcustom image-slicing-curl-args
+  '("-s" "-L"
+    ;; some server returns error unless user-agent is set to modern browser, e.g. segmentfault.com
+    "-A" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36")
+  "Extra arguments passed to curl."
+  :group 'image-slicing
+  :type '(repeat string))
 
 (defvar image-slicing--temporary-file-template "image-slicing-remote-images-")
 
-(defvar image-slicing--timer nil)
-
 (defvar image-slicing-debug-p nil)
+
+(defvar-local image-slicing--cursor-fringe-overlay nil)
+
+(defvar-local image-slicing--links nil)
+
+(defvar-local image-slicing--overlay-list nil)
+
+(defvar-local image-slicing--timer nil)
+
+(defvar-local image-slicing-curl-buffers nil  "List of buffers used by curl.")
 
 (defun image-slicing--async-start-process (name program finish-func &rest program-args)
   "Start the executable PROGRAM asynchronously named NAME.
@@ -88,7 +101,7 @@ working directory."
                   :name name
                   :buffer buf
                   :stderr buf-err
-                  :command (cons program (cl-delete nil program-args))))))
+                  :command (cons program (-non-nil (append program-args image-slicing-curl-args)))))))
     (set-process-sentinel
      (get-buffer-process buf-err)
      (lambda (proc _change)
@@ -102,7 +115,8 @@ working directory."
          (with-current-buffer (process-buffer proc)
            (funcall finish-func (buffer-string))
            (unless image-slicing-debug-p
-             (kill-buffer))))))))
+             (kill-buffer))))))
+    (push (cons buf buf-err) image-slicing-curl-buffers)))
 
 (defun image-slicing--remote-file-p (image-src)
   "Check if IMAGE-SRC is a remote file."
@@ -112,29 +126,39 @@ working directory."
   "Check if URL is supported by Emacs image."
   (image-supported-file-p (url-file-extension url)))
 
+(defun image-slicing-temporary-file (url)
+  "Return temporary name to save target URL."
+  (f-expand (concat image-slicing--temporary-file-template (md5 url))
+            temporary-file-directory))
+
 (defun image-slicing--download-file-if-need (image-src callback)
   "If IMAGE-SRC is a remote file, download it and run the CALLBACK function.
 Otherwise, just run the CALLBACK function only."
 
-  (let ((temp-image-file (make-temp-file image-slicing--temporary-file-template)))
-    (if (image-slicing--remote-file-p image-src)
-        (image-slicing--async-start-process
-         "curl"
-         "curl"
-         (lambda (data)
-           (funcall callback temp-image-file))
-         image-src
-         "-s"
-         ;; request might be denied by some servers without referer section in http header.
-         (if (equal major-mode 'eww-mode)
-             (concat "-e " (plist-get eww-data :url)))
-         "-o"
-         temp-image-file)
-      (funcall callback image-src))))
+  (let ((temp-image-file (image-slicing-temporary-file image-src)))
+    (cond
+     ((f-exists? image-src)
+      (funcall callback image-src))
+     ((f-exists? temp-image-file)
+      (funcall callback temp-image-file))
+     ((image-slicing--remote-file-p image-src)
+      (image-slicing--async-start-process
+       (concat "curl-" (buffer-name))
+       "curl"
+       (lambda (_) (funcall callback temp-image-file))
+       image-src
+       ;; request might be denied by some servers without referer section in http header.
+       (if (equal major-mode 'eww-mode)
+           (concat "-e " (plist-get eww-data :url)))
+       "-o"
+       temp-image-file))
+     (t
+      (message "file %s not loaded..." image-src)))))
 
 (defun image-slicing-display (start end display buffer &optional before-string after-string)
   "Make an overlay from START to END in the BUFFER to show DISPLAY.
-If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or after-string."
+If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or
+ after-string."
   (when-let* (((buffer-live-p buffer))
               (overlay (make-overlay start end buffer)))
     (add-to-list 'image-slicing--overlay-list overlay)
@@ -148,7 +172,7 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or after-str
     overlay))
 
 (defun image-slicing-slice (image-src max-rows)
-  "Slice IMAGE-SRC into mutiple rows limited by MAX-ROWS."
+  "Slice IMAGE-SRC into multiple rows limited by MAX-ROWS."
   (let* ((image (image-slicing-create-image image-src))
          (image-pixel-cons (image-size image t))
          (image-pixel-h (cdr image-pixel-cons))
@@ -178,14 +202,21 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or after-str
       (image-slicing--download-file-if-need
        image-src
        (lambda (image)
-         (unless line-beginning-p
-           (image-slicing-display begin (1+ begin) "" buffer new-line-str)
-           (setq begin (1+ begin)))
-         (dolist (image (image-slicing-slice image (- end begin 1)))
-           (image-slicing-display begin (1+ begin) image buffer nil new-line-str)
-           (setq begin (1+ begin)))
-         (image-slicing-display begin end "" buffer)
-         (plist-put image-file-info :status "finished"))))))
+         (when (or (image-slicing-supported-url-p image)
+                   (and (executable-find "file")
+                        (image-supported-file-p
+                         (string-replace "image/" "."
+                                         (car (string-split (shell-command-to-string
+                                                             (concat "file -b --mime " image))
+                                                            ";"))))))
+             (unless line-beginning-p
+               (image-slicing-display begin (1+ begin) "" buffer new-line-str)
+               (setq begin (1+ begin)))
+           (dolist (image (image-slicing-slice image (- end begin 1)))
+             (image-slicing-display begin (1+ begin) image buffer nil new-line-str)
+             (setq begin (1+ begin)))
+           (image-slicing-display begin end "" buffer)
+           (plist-put image-file-info :status "finished")))))))
 
 (defun image-slicing-run-tasks ()
   "Run Tasks unstarted."
@@ -218,7 +249,7 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or after-str
                 (begin (org-element-property :begin link))
                 (end (org-element-property :end link))
                 (raw-link (org-element-property :raw-link link)))
-            (when (and link (image-slicing-supported-url-p raw-link))
+            (when link
               (push
                (list
                 :status "init"
@@ -260,6 +291,15 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or after-str
   (mapc #'delete-overlay image-slicing--overlay-list)
   (setq image-slicing--overlay-list nil)
 
+  (let ((kill-buffer-query-functions nil)
+        (it))
+    (while (setq it (pop image-slicing-curl-buffers))
+      (when-let* ((process (get-buffer-process (car it)))
+                  (process-live-p process))
+        (kill-process process))
+      (kill-buffer (car it))
+      (kill-buffer (cdr it))))
+
   (remove-hook 'post-command-hook #'image-slicing-post-command t))
 
 (defun image-slicing-create-image (image-src)
@@ -268,6 +308,7 @@ If the image width is greater than `image-slicing-max-width`, scale it down."
   (let* ((image (create-image image-src))
          (image-pixel-cons (image-size image t))
          (image-pixel-w (car image-pixel-cons)))
+    (image-flush image)
     (when (> image-pixel-w image-slicing-max-width)
       (setf (image-property image :width) image-slicing-max-width))
     image))
@@ -275,15 +316,17 @@ If the image width is greater than `image-slicing-max-width`, scale it down."
 (defun image-slicing-post-command ()
   "Handle cursor visibility in eww-mode when over image slicing overlays.
 This function is installed on `post-command-hook'."
-  (when (derived-mode-p 'eww-mode)
+  (when (bound-and-true-p image-slicing-mode)
     (if (cl-some (lambda (overlay)
                    (string-equal (overlay-get overlay 'overlay-type) "image-slicing"))
                  (overlays-at (point)))
         (image-slicing-set-cursor-fringe)
       (image-slicing-unset-cursor-fringe))))
 
+
 (defun image-slicing-render-buffer ()
   "Auto image overlay."
+  (image-slicing-clear)
   (setq image-slicing--links (image-slicing--overlay-list-links))
   (setq image-slicing--timer (image-slicing--create-render-timer))
 
@@ -291,10 +334,10 @@ This function is installed on `post-command-hook'."
 
 (defun image-slicing-tag-img (dom &optional url)
   "Parse img DOM."
-    (let ((url (string-trim-right (shr-expand-url (or url (shr--preferred-image dom))) ",")))
-      (when (not (string-prefix-p "http" url))
-        (setq url (concat "https:" url)))
-      (insert (format "[[%s]]" url))))
+  (let ((url (string-trim-right (shr-expand-url (or url (shr--preferred-image dom))) ",")))
+    (when (s-starts-with? "http" url)
+      (insert (format "[[%s]]" url))
+      t)))
 
 (define-minor-mode image-slicing-mode
   "A minor mode that show image overlay."
@@ -303,6 +346,24 @@ This function is installed on `post-command-hook'."
   (if (not image-slicing-mode)
       (image-slicing-clear)
     (image-slicing-render-buffer)))
+
+(autoload 'elfeed-show-refresh "elfeed-show.el")
+(defun shr/toggle-image-slicing (&optional enable)
+  "Toggle image-slicing then refresh current buffer."
+  (interactive)
+  (if (or enable (not (member #'image-slicing-mode eww-after-render-hook)))
+      (progn
+        (advice-add 'shr-tag-img :before-until #'image-slicing-tag-img)
+        (add-hook 'eww-after-render-hook #'image-slicing-mode)
+        (message "image-slicing-mode is ON."))
+    (advice-remove 'shr-tag-img  #'image-slicing-tag-img)
+    (remove-hook 'eww-after-render-hook #'image-slicing-mode)
+    (message "image-slicing-mode is OFF."))
+  (pcase major-mode
+    ('eww-mode (eww-reload))
+    ('elfeed-show-mode (elfeed-show-refresh))
+    (_ nil)))
+
 
 (provide 'image-slicing)
 ;;; image-slicing.el ends here
