@@ -67,7 +67,7 @@ Here are a few variables that can be used for configuration:
 image-slice can also work with elfeed:
 
 #+begin_src emacs-lisp -r
-  ;; to to shr-external-rendering-functions (skip if alread setup for eww)
+  ;; add to shr-external-rendering-functions (skip if alread setup for eww)
   (add-to-list 'shr-external-rendering-functions
                '(img . image-slicing-tag-img))
 
