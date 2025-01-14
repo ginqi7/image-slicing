@@ -334,10 +334,34 @@ This function is installed on `post-command-hook'."
 
 (defun image-slicing-tag-img (dom &optional url)
   "Parse img DOM."
-  (let ((url (string-trim-right (shr-expand-url (or url (shr--preferred-image dom))) ",")))
-    (when (s-starts-with? "http" url)
-      (insert (format "[[%s]]" url))
-      t)))
+  (let ((url (string-trim-right (shr-expand-url (or url (shr--preferred-image dom))) ","))
+        (output-file))
+    (cond ((s-starts-with? "http" url) (insert (format "[[%s]]" url)) t)
+          ((s-starts-with? "data:image" url)
+           (setq output-file
+                 (make-temp-file
+                  "image-slicing-" nil
+                  (concat "." (image-slicing-base64-image-type url))))
+           (image-slicing-save-base64-image-from-source url output-file)
+           (insert (format "[[file:%s]]" output-file))))))
+
+(defun image-slicing-base64-image-type (source)
+  "Get base64 image type from SOURCE."
+  (when (string-match "^data:image/\\([^;]+\\);base64," source)
+    (match-string 1 source)))
+
+(defun image-slicing-save-base64-image-from-source (source output-file)
+  "Save base64 image SOURCE to OUTPUT-FILE."
+  (let* ((base64-string
+          (replace-regexp-in-string "^data:image/[^;]+;base64," "" source))
+         (binary-data
+          (base64-decode-string base64-string)))
+    ;; Write the decoded binary data to the output file
+    (with-temp-file output-file
+      (insert binary-data)
+      (save-buffer)
+      (message "Image saved to %s" output-file))))
+
 
 (define-minor-mode image-slicing-mode
   "A minor mode that show image overlay."
