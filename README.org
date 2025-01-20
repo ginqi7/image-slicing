@@ -2,6 +2,9 @@
 #+author: Qiqi Jin
 #+language: en
 
+#+HTML: <a href ="https://github.com/ginqi7/image-slicing/blob/master/README.zh-CN.org"><img src="https://img.shields.io/badge/README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-555555.svg"/></a>
+
+* Overview
 
 In Emacs, displaying an image occupies one line regardless of its height. The movement over the image while navigating by lines can be quite frustrating.
 
@@ -18,7 +21,8 @@ You can find some development history [[file:development-history.org][here]].
 
 * Prerequisites
 
-*curl*: Used to download remote images.
+** CLI
+*Curl*: Used to download remote images.
 
 ** Require Packages
 + *org-element*: Used to parse the buffer to retrieve all links.
@@ -84,12 +88,15 @@ image-slice can also work with elfeed:
 
 
 ** Supported Link Format
-*** Org Link
-- =[[url][tag]]=
-- =[[url]]=
-*** pure link
-- =file:./hello.png=
-- =http://image.png=
+- Org Links
+  - =[[url][tag]]=
+  - =[[url]]=
+- Pure Links
+  - =file:./hello.png=
+  - =http://image.png=
+- EWW Html Links
+  - <img src=''>
+  - Support base64 formatted images
 
 * Example
 
