@@ -147,7 +147,7 @@ Otherwise, just run the CALLBACK function only."
     (cond
      ((f-exists? image-src)
       (funcall callback image-src))
-     ((f-exists? temp-image-file)
+     ((and (f-exists? temp-image-file) (not (f-empty? temp-image-file)))
       (funcall callback temp-image-file))
      ((image-slicing--remote-file-p image-src)
       (image-slicing--async-start-process
