@@ -196,7 +196,8 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or
            (end (plist-get image-file-info :end))
            (buffer (plist-get image-file-info :buffer))
            (image-src (plist-get image-file-info :src))
-           (new-line-str (propertize "\n" 'face 'default))
+           (new-line-str (propertize "\n" 'face 'default
+                                     'line-height t))
            (line-beginning-p (progn (goto-char begin) (equal begin (line-beginning-position)))))
       (plist-put image-file-info :status "start")
       (image-slicing--download-file-if-need
@@ -209,9 +210,9 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or
                                          (car (string-split (shell-command-to-string
                                                              (concat "file -b --mime " image))
                                                             ";"))))))
-             (unless line-beginning-p
-               (image-slicing-display begin (1+ begin) "" buffer new-line-str)
-               (setq begin (1+ begin)))
+           (unless line-beginning-p
+             (image-slicing-display begin (1+ begin) "" buffer new-line-str)
+             (setq begin (1+ begin)))
            (dolist (image (image-slicing-slice image (- end begin 1)))
              (image-slicing-display begin (1+ begin) image buffer nil new-line-str)
              (setq begin (1+ begin)))
