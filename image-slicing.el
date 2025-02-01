@@ -213,9 +213,12 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or
            (unless line-beginning-p
              (image-slicing-display begin (1+ begin) "" buffer new-line-str)
              (setq begin (1+ begin)))
-           (dolist (image (image-slicing-slice image (- end begin 1)))
-             (image-slicing-display begin (1+ begin) image buffer nil new-line-str)
-             (setq begin (1+ begin)))
+	   (let* ((images (image-slicing-slice image (- end begin 1)))
+		  (len (length images)))
+	     (dotimes (i len)
+	       (image-slicing-display begin (1+ begin) (nth i images) buffer nil
+				      (when (/= i (1- len)) new-line-str))
+	       (setq begin (1+ begin))))
            (image-slicing-display begin end "" buffer)
            (plist-put image-file-info :status "finished")))))))
 
