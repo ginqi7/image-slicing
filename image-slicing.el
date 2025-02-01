@@ -65,6 +65,11 @@
   :group 'image-slicing
   :type 'number)
 
+(defcustom image-slicing-newline-trailing-text t
+  "Enables putting text trailing an image link on a new line."
+  :group 'image-slicing
+  :type 'boolean)
+
 (defcustom image-slicing-curl-args
   '("-s" "-L"
     ;; some server returns error unless user-agent is set to modern browser, e.g. segmentfault.com
@@ -217,7 +222,9 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or
 		  (len (length images)))
 	     (dotimes (i len)
 	       (image-slicing-display begin (1+ begin) (nth i images) buffer nil
-				      (when (/= i (1- len)) new-line-str))
+				      (when (or image-slicing-newline-trailing-text
+						(/= i (1- len)))
+					new-line-str))
 	       (setq begin (1+ begin))))
            (image-slicing-display begin end "" buffer)
            (plist-put image-file-info :status "finished")))))))
