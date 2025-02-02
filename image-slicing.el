@@ -92,6 +92,9 @@
 
 (defvar-local image-slicing-curl-buffers nil  "List of buffers used by curl.")
 
+(defvar-local image-slicing--prev-active-cursor-type t
+  "Saves value of `cursor-type' to restore from.")
+
 (defun image-slicing--async-start-process (name program finish-func &rest program-args)
   "Start the executable PROGRAM asynchronously named NAME.
 PROGRAM is passed PROGRAM-ARGS, calling FINISH-FUNC with the
@@ -277,7 +280,8 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or
 
 (defun image-slicing-unset-cursor-fringe ()
   "Unset fringe indicator of last cursor."
-  (setq cursor-type t)
+  (unless cursor-type
+    (setq cursor-type image-slicing--prev-active-cursor-type))
   (when image-slicing--cursor-fringe-overlay
     (delete-overlay image-slicing--cursor-fringe-overlay)
     (setq image-slicing--cursor-fringe-overlay nil)))
@@ -285,6 +289,7 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or
 (defun image-slicing-set-cursor-fringe ()
   "Set an fringe indicator for the cursor position."
   (image-slicing-unset-cursor-fringe)
+  (setq image-slicing--prev-active-cursor-type cursor-type)
   (setq cursor-type nil)
   (when image-slicing-cursor-fringe-bitmaps
     (let ((ov (make-overlay (point) (point))))
