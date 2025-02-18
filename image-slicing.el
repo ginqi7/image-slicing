@@ -185,7 +185,7 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or
          (image-pixel-cons (image-size image t))
          (image-pixel-h (cdr image-pixel-cons))
          (spliced-image-line-height (* image-slicing-line-height-scale (default-font-height)))
-         (rows (/ image-pixel-h spliced-image-line-height))
+         (rows (max (/ image-pixel-h spliced-image-line-height) 1))
          (rows (min max-rows rows))
          (x 0.0)
          (dx 1.0001)
