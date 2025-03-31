@@ -372,10 +372,10 @@ This function is installed on `post-command-hook'."
           (replace-regexp-in-string "^data:image/[^;]+;base64," "" source))
          (binary-data
           (base64-decode-string base64-string)))
+
     ;; Write the decoded binary data to the output file
     (with-temp-file output-file
       (insert binary-data)
-      (save-buffer)
       (message "Image saved to %s" output-file))))
 
 
