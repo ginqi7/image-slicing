@@ -147,7 +147,7 @@ Otherwise, just run the CALLBACK function only."
     (cond
      ((f-exists? image-src)
       (funcall callback image-src))
-     ((f-exists? temp-image-file)
+     ((and (f-exists? temp-image-file) (not (f-empty? temp-image-file)))
       (funcall callback temp-image-file))
      ((image-slicing--remote-file-p image-src)
       (image-slicing--async-start-process
@@ -185,7 +185,7 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or
          (image-pixel-cons (image-size image t))
          (image-pixel-h (cdr image-pixel-cons))
          (spliced-image-line-height (* image-slicing-line-height-scale (default-font-height)))
-         (rows (/ image-pixel-h spliced-image-line-height))
+         (rows (max (/ image-pixel-h spliced-image-line-height) 1))
          (rows (min max-rows rows))
          (x 0.0)
          (dx 1.0001)
@@ -372,10 +372,10 @@ This function is installed on `post-command-hook'."
           (replace-regexp-in-string "^data:image/[^;]+;base64," "" source))
          (binary-data
           (base64-decode-string base64-string)))
+
     ;; Write the decoded binary data to the output file
     (with-temp-file output-file
       (insert binary-data)
-      (save-buffer)
       (message "Image saved to %s" output-file))))
 
 
