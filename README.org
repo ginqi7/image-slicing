@@ -28,16 +28,25 @@ You can find some development history [[file:development-history.org][here]].
 + *org-element*: Used to parse the buffer to retrieve all links.
 + *image*: Used to create an image object.
 + *url-util* : A utility for handling URL formats.
++ *dash.el* : A modern list library for Emacs
++ *f.el* : Modern API for working with files and directories in Emacs
++ *s.el* : The long lost Emacs string manipulation library.
 
 ** Install
 + clone the project in your own emacs configuration files directory, like:
   #+BEGIN_SRC sh
-    git clone git@github.com:ginqi7/image-slicing.git ~/.emacs.d/lisp/image-slicing
+    git clone https://github.com/magnars/dash.el ~/.emacs.d/lisp/dash;
+    git clone http://github.com/rejeep/f.el ~/.emacs.d/lisp/f;
+    git clone https://github.com/magnars/s.el ~/.emacs.d/lisp/s;
+    git clone git@github.com:ginqi7/image-slicing.git ~/.emacs.d/lisp/image-slicing;
   #+END_SRC
 
 + add the path to 'load-path'
   #+BEGIN_SRC emacs-lisp
-    (add-to-list 'load-path (expand-file-name "~/.emacs.d/lisp/d/lisp/image-slicing"))
+    (add-to-list 'load-path "~/.emacs.d/lisp/dash")
+    (add-to-list 'load-path "~/.emacs.d/lisp/f")
+    (add-to-list 'load-path "~/.emacs.d/lisp/s")
+    (add-to-list 'load-path (expand-file-name "~/.emacs.d/lisp/image-slicing"))
   #+END_SRC
 
 * Configuration
