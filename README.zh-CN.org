@@ -21,16 +21,25 @@
 + *org-element*: 用于解析 Buffer 里的所有链接。
 + *image*: 用于创建 Image 对象。
 + *url-util* : 用于处理 URL 格式的工具。
++ *dash.el* : 一个现代的 Emacs 列表库。
++ *f.el* : 用于处理 Emacs 中文件和目录的现代 API
++ *s.el* : Emacs 字符串操作库。
 
 ** 安装 Image-slicing
 + 克隆 Image-slicing 项目到你自己的 Emacs 配置目录下：
 #+BEGIN_SRC sh
-  git clone git@github.com:ginqi7/image-slicing.git ~/.emacs.d/lisp/image-slicing
+    git clone https://github.com/magnars/dash.el ~/.emacs.d/lisp/dash;
+    git clone http://github.com/rejeep/f.el ~/.emacs.d/lisp/f;
+    git clone https://github.com/magnars/s.el ~/.emacs.d/lisp/s;
+    git clone git@github.com:ginqi7/image-slicing.git ~/.emacs.d/lisp/image-slicing;
 #+END_SRC
 
 + 把克隆的路径添加到 =load-path= 当中
 #+BEGIN_SRC emacs-lisp
-  (add-to-list 'load-path (expand-file-name "~/.emacs.d/lisp/d/lisp/image-slicing"))
+    (add-to-list 'load-path "~/.emacs.d/lisp/dash")
+    (add-to-list 'load-path "~/.emacs.d/lisp/f")
+    (add-to-list 'load-path "~/.emacs.d/lisp/s")
+    (add-to-list 'load-path (expand-file-name "~/.emacs.d/lisp/image-slicing"))
 #+END_SRC
 
 * 配置
