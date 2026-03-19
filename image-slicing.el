@@ -339,7 +339,6 @@ This function is installed on `post-command-hook'."
         (image-slicing-set-cursor-fringe)
       (image-slicing-unset-cursor-fringe))))
 
-
 (defun image-slicing-render-buffer ()
   "Auto image overlay."
   (image-slicing-clear)
@@ -359,7 +358,11 @@ This function is installed on `post-command-hook'."
                   "image-slicing-" nil
                   (concat "." (image-slicing-base64-image-type url))))
            (image-slicing-save-base64-image-from-source url output-file)
-           (insert (format "[[file:%s]]" output-file))))))
+           (insert (format "[[file:%s]]" output-file)))
+          ((and (featurep 'nov) nov-work-dir)
+           (setq output-file (file-name-concat nov-work-dir "OEBPS" url))
+           (insert (format "[[file:%s]]" output-file)))
+          )))
 
 (defun image-slicing-base64-image-type (source)
   "Get base64 image type from SOURCE."
@@ -377,7 +380,6 @@ This function is installed on `post-command-hook'."
     (with-temp-file output-file
       (insert binary-data)
       (message "Image saved to %s" output-file))))
-
 
 (define-minor-mode image-slicing-mode
   "A minor mode that show image overlay."
@@ -403,7 +405,6 @@ This function is installed on `post-command-hook'."
     ('eww-mode (eww-reload))
     ('elfeed-show-mode (elfeed-show-refresh))
     (_ nil)))
-
 
 (provide 'image-slicing)
 ;;; image-slicing.el ends here
