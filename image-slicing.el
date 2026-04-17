@@ -360,7 +360,7 @@ This function is installed on `post-command-hook'."
            (image-slicing-save-base64-image-from-source url output-file)
            (insert (format "[[file:%s]]" output-file)))
           ((and (featurep 'nov) nov-work-dir)
-           (setq output-file (file-name-concat nov-work-dir "OEBPS" url))
+           (setq output-file (car (directory-files-recursively nov-work-dir (regexp-quote url))))
            (insert (format "[[file:%s]]" output-file)))
           )))
 
