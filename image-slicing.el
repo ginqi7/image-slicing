@@ -244,10 +244,18 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or
         (image-slicing-display-file link)
         (setq count (1+ count))))))
 
+(defun image-slicing--run-tasks-in-buffer (buffer)
+  "Run pending image tasks in BUFFER."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (image-slicing-run-tasks))))
+
 (defun image-slicing--create-render-timer ()
   "Create a timer to render images at regular intervals."
   (unless image-slicing--timer
-    (run-at-time nil 0.5 #'image-slicing-run-tasks)))
+    (run-at-time nil 0.5
+                 #'image-slicing--run-tasks-in-buffer
+                 (current-buffer))))
 
 (defun image-slicing--overlay-list-links ()
   "List all links in the current buffer."
@@ -316,7 +324,9 @@ If BEFORE-STRING or AFTER-STRING not nil, put overlay before-string or
       (kill-buffer (car it))
       (kill-buffer (cdr it))))
 
-  (remove-hook 'post-command-hook #'image-slicing-post-command t))
+  (remove-hook 'post-command-hook #'image-slicing-post-command t)
+  (remove-hook 'kill-buffer-hook #'image-slicing-clear t)
+  (remove-hook 'change-major-mode-hook #'image-slicing-clear t))
 
 (defun image-slicing-create-image (image-src)
   "Create an image object by IMAGE-SRC.
@@ -345,7 +355,9 @@ This function is installed on `post-command-hook'."
   (setq image-slicing--links (image-slicing--overlay-list-links))
   (setq image-slicing--timer (image-slicing--create-render-timer))
 
-  (add-hook 'post-command-hook #'image-slicing-post-command nil t))
+  (add-hook 'post-command-hook #'image-slicing-post-command nil t)
+  (add-hook 'kill-buffer-hook #'image-slicing-clear nil t)
+  (add-hook 'change-major-mode-hook #'image-slicing-clear nil t))
 
 (defun image-slicing-tag-img (dom &optional url)
   "Parse img DOM."
